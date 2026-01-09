@@ -4,4 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
 ndarray = "0.17.1"
+
+[dev-dependencies]
+criterion = "0.8.1"
+
+[[bench]]
+name = "model"
+harness = false
