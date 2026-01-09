@@ -15,7 +15,7 @@ fn main() -> Result<()> {
             vec![4., 1., 0., 1., 0., 36.],  // constraint 3
             vec![-5., -4., 0., 0., 1., 0.], // objective
         ],
-        stream,
+        &stream,
     )?;
 
     Ok(())
