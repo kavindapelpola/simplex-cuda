@@ -1,13 +1,15 @@
 use anyhow::{Result, anyhow};
 
-pub struct Matrix {
-    data: Vec<f64>,
+pub type Matrixf32 = Matrix<f32>;
+
+pub struct Matrix<T: Clone> {
+    data: Vec<T>,
     row_count: usize,
     col_count: usize,
 }
 
-impl Matrix {
-    pub fn new(rows: Vec<Vec<f64>>) -> Result<Matrix> {
+impl<T: Clone> Matrix<T> {
+    pub fn new(rows: &Vec<Vec<T>>) -> Result<Matrix<T>> {
         let row_count = rows.len();
         if row_count == 0 {
             return Err(anyhow!("empty matrix"));
@@ -17,7 +19,7 @@ impl Matrix {
             return Err(anyhow!("non-square matrix"));
         }
         Ok(Matrix {
-            data: rows.into_iter().flatten().collect(),
+            data: rows.iter().flatten().cloned().collect(),
             row_count,
             col_count,
         })
