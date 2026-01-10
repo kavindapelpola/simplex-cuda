@@ -1,12 +1,13 @@
 use ndarray::array;
 
-pub fn solve() {
+use crate::model::flat_matrix::FlatMatrix;
+
+pub fn solve_ndarray() {
     let mut table = array![
         [3., 5., 1., 0., 0., 78.],  // constraint 1
         [4., 1., 0., 1., 0., 36.],  // constraint 3
         [-5., -4., 0., 0., 1., 0.], // objective
     ];
-    println!("{:?}", table);
 
     loop {
         let entry = table
@@ -16,8 +17,6 @@ pub fn solve() {
             .into_iter()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(index, _)| index);
-
-        println!("{:?}", entry);
 
         let exit = table
             .column(entry.unwrap())
@@ -34,10 +33,8 @@ pub fn solve() {
             })
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(index, _)| index);
-        println!("{:?}", exit);
 
         let divisor = table[[exit.unwrap(), entry.unwrap()]];
-        println!("Divisor: {}", divisor);
 
         *table.row_mut(exit.unwrap()) /= divisor;
 
@@ -49,21 +46,68 @@ pub fn solve() {
             }
         }
 
-        println!("{:?}", table);
-
         if table.row(table.nrows() - 1).iter().all(|&x| x >= 0.) {
             break;
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub fn solve_flatmatrix() {
+    let mut table = FlatMatrix::new(&vec![
+        vec![3., 5., 1., 0., 0., 78.],
+        vec![4., 1., 0., 1., 0., 36.],
+        vec![-5., -4., 0., 0., 1., 0.],
+    ])
+    .unwrap();
 
-    #[test]
-    fn test_solve() {
-        solve();
-        assert!(false);
+    loop {
+        let entry = table
+            .last_row()
+            .iter()
+            .enumerate()
+            .into_iter()
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(index, _)| index)
+            .unwrap();
+
+        let exit = table
+            .col(entry)
+            .unwrap()
+            .iter()
+            .enumerate()
+            .take(table.rows - 1)
+            .filter_map(|(row_index, &value)| {
+                if *value > 0. {
+                    let ratio = table.get(row_index, table.cols - 1).unwrap() / value;
+                    Some((row_index, ratio))
+                } else {
+                    None
+                }
+            })
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(index, _)| index)
+            .unwrap();
+
+        let divisor = *table.get(exit, entry).unwrap();
+
+        // Divide pivot row by divisor
+        for col in 0..table.cols {
+            *table.get_mut(exit, col).unwrap() /= divisor;
+        }
+
+        // Eliminate column in other rows
+        for row_index in 0..table.rows {
+            if row_index != exit {
+                let factor = *table.get(row_index, entry).unwrap();
+                for col in 0..table.cols {
+                    let pivot_value = *table.get(exit, col).unwrap();
+                    *table.get_mut(row_index, col).unwrap() -= factor * pivot_value;
+                }
+            }
+        }
+
+        if table.last_row().iter().all(|&x| x >= 0.) {
+            break;
+        }
     }
 }
