@@ -5,8 +5,11 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
-cust = "0.3.2"
+cust = { version = "0.3.2", optional = true }
 tracing = "0.1.44"
+
+[features]
+cuda = ["cust"]
 
 [dev-dependencies]
 criterion = "0.8.1"

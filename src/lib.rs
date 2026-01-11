@@ -21,7 +21,7 @@ pub fn solve_cpu(table: &mut FlatMatrix<f32>, max_loops: Option<usize>) -> Resul
             .into_iter()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(index, _)| index)
-            .unwrap();
+            .ok_or_else(|| anyhow!("no negative coefficients found in objective function"))?;
 
         let exit = table
             .col(entry)
@@ -39,7 +39,7 @@ pub fn solve_cpu(table: &mut FlatMatrix<f32>, max_loops: Option<usize>) -> Resul
             })
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(index, _)| index)
-            .unwrap();
+            .ok_or_else(|| anyhow!("no valid pivot row found"))?;
 
         let divisor = *table.get(exit, entry).unwrap();
         let pivot_row = table.row_mut(exit).unwrap();
