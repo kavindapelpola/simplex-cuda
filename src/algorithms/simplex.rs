@@ -10,43 +10,75 @@ pub fn solve_ndarray() {
     ];
 
     loop {
-        let entry = table
-            .row(table.nrows() - 1)
-            .iter()
-            .enumerate()
-            .into_iter()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(index, _)| index);
+        // Cache dimensions to avoid repeated calculations
+        let last_row = table.nrows() - 1;
+        let last_col = table.ncols() - 1;
 
-        let exit = table
-            .column(entry.unwrap())
+        // Find entry column (most negative in objective row)
+        let entry_col = table
+            .row(last_row)
             .iter()
             .enumerate()
-            .take(table.nrows() - 1)
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(index, _)| index)
+            .unwrap();
+
+        // Find exit row (minimum ratio test)
+        let exit_row = table
+            .column(entry_col)
+            .iter()
+            .enumerate()
+            .take(last_row)
             .filter_map(|(row_index, &value)| {
                 if value > 0. {
-                    let ratio = table[[row_index, table.ncols() - 1]] / value;
+                    let ratio = table[[row_index, last_col]] / value;
                     Some((row_index, ratio))
                 } else {
                     None
                 }
             })
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(index, _)| index);
+            .map(|(index, _)| index)
+            .unwrap();
 
-        let divisor = table[[exit.unwrap(), entry.unwrap()]];
+        // Normalize pivot row
+        let divisor = table[[exit_row, entry_col]];
+        *table.row_mut(exit_row) /= divisor;
 
-        *table.row_mut(exit.unwrap()) /= divisor;
+        // CRITICAL OPTIMIZATION: Eliminate other rows without allocation
+        // Instead of: let pivot_row = table.row(exit_row).to_owned();
+        // Use unsafe to get non-overlapping slice borrows for better vectorization
+        let nrows = table.nrows();
+        let ncols = table.ncols();
+        unsafe {
+            let data_ptr = table.as_mut_ptr();
 
-        for row_index in 0..table.nrows() {
-            if row_index != exit.unwrap() {
-                let factor = table[[row_index, entry.unwrap()]];
-                let pivot_row = table.row(exit.unwrap()).to_owned();
-                table.row_mut(row_index).scaled_add(-factor, &pivot_row);
+            // Create immutable slice for pivot row (safe: we won't modify it)
+            let pivot_row = std::slice::from_raw_parts(
+                data_ptr.add(exit_row * ncols),
+                ncols
+            );
+
+            for row_index in 0..nrows {
+                if row_index != exit_row {
+                    let factor = *data_ptr.add(row_index * ncols + entry_col);
+
+                    // Create mutable slice for target row (safe: non-overlapping with pivot)
+                    let target_row = std::slice::from_raw_parts_mut(
+                        data_ptr.add(row_index * ncols),
+                        ncols
+                    );
+
+                    // AXPY using iterator pattern for optimal vectorization
+                    for (t, &p) in target_row.iter_mut().zip(pivot_row.iter()) {
+                        *t -= factor * p;
+                    }
+                }
             }
         }
 
-        if table.row(table.nrows() - 1).iter().all(|&x| x >= 0.) {
+        // Check termination condition
+        if table.row(last_row).iter().all(|&x| x >= 0.) {
             break;
         }
     }
@@ -90,19 +122,18 @@ pub fn solve_flatmatrix() {
 
         let divisor = *table.get(exit, entry).unwrap();
 
-        // Divide pivot row by divisor
-        for col in 0..table.cols {
-            *table.get_mut(exit, col).unwrap() /= divisor;
+        // Optimized row operations with slice-based memory access
+        // Division: operates directly on mutable row slice
+        let pivot_row = table.row_mut(exit).unwrap();
+        for elem in pivot_row.iter_mut() {
+            *elem /= divisor;
         }
 
-        // Eliminate column in other rows
+        // AXPY operation: target_row -= factor * source_row
         for row_index in 0..table.rows {
             if row_index != exit {
-                let factor = *table.get(row_index, entry).unwrap();
-                for col in 0..table.cols {
-                    let pivot_value = *table.get(exit, col).unwrap();
-                    *table.get_mut(row_index, col).unwrap() -= factor * pivot_value;
-                }
+                let factor = unsafe { *table.get_unchecked(row_index, entry) };
+                table.row_sub_scaled_f32(row_index, factor, exit);
             }
         }
 

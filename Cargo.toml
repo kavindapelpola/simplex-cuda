@@ -13,6 +13,12 @@ tracing = "0.1.44"
 criterion = "0.8.1"
 tracing-subscriber = "0.3.22"
 
+# Aggressive optimization for benchmarks
+[profile.bench]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
 [[bench]]
 name = "model"
 harness = false
