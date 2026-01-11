@@ -11,7 +11,7 @@ fn main() -> Result<()> {
         vec![-5., -4., 0., 0., 1., 0.], // objective
     ])?;
 
-    simplex_cuda::solve_cpu(&mut table, None)?;
+    simplex_cuda::solvers::cpu::solve(&mut table, None)?;
 
     Ok(())
 }

@@ -7,7 +7,7 @@ fn simplex_solve_small(c: &mut Criterion) {
     group.bench_function("flatmatrix", |b| {
         b.iter_batched(
             || create_small_table_flatmatrix(),
-            |mut table| simplex_cuda::solve_cpu(&mut table, None),
+            |mut table| simplex_cuda::solvers::cpu::solve(&mut table, None),
             BatchSize::SmallInput,
         )
     });
@@ -24,7 +24,7 @@ fn simplex_solve_large(c: &mut Criterion) {
     group.bench_function("flatmatrix", |b| {
         b.iter_batched(
             || create_large_table_flatmatrix(),
-            |mut table| simplex_cuda::solve_cpu(&mut table, None),
+            |mut table| simplex_cuda::solvers::cpu::solve(&mut table, None),
             BatchSize::LargeInput,
         )
     });
