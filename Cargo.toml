@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 cust = "0.3.2"
-ndarray = "0.17.1"
 tracing = "0.1.44"
 
 [dev-dependencies]
@@ -20,9 +19,13 @@ lto = "fat"
 codegen-units = 1
 
 [[bench]]
-name = "model"
+name = "flat_matrix"
 harness = false
 
 [[bench]]
 name = "simplex"
+harness = false
+
+[[bench]]
+name = "cpu_vs_gpu"
 harness = false

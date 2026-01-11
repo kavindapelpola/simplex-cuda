@@ -6,22 +6,13 @@ fn matrix_create(c: &mut Criterion) {
     let _ctx = cust::quick_init();
     let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
 
-    let small = vec![vec![0., 0.], vec![0., 0.]];
     let large = vec![vec![0.; 10_000]; 10_000];
 
-    c.bench_function("small flat matrix create", |b| {
-        b.iter(|| FlatMatrix::new(&small))
-    });
-
-    c.bench_function("small cuda matrix create", |b| {
-        b.iter(|| Matrixf32::new(&small, &stream))
-    });
-
-    c.bench_function("large flat matrix create", |b| {
+    c.bench_function("10k x 10k flat matrix create", |b| {
         b.iter(|| FlatMatrix::new(&large))
     });
 
-    c.bench_function("large cuda matrix create", |b| {
+    c.bench_function("10k x 10k cuda matrix create", |b| {
         b.iter(|| Matrixf32::new(&large, &stream))
     });
 }
