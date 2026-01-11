@@ -172,7 +172,7 @@ mod tests {
             .maximise()
             .constraint(vec![3., 5., 78.])?.less()?
             .constraint(vec![4., 1., 36.])?.less()?
-            .maximise().build()?;
+            .build()?;
 
         let m = p.matrix.ok_or_else(||anyhow!("matrix could not compute"))?;
 
