@@ -90,11 +90,11 @@ impl Problem{
     fn calculate_matrix(&mut self) -> Result<()>{
         let num_variables = self.problem.len();
         let num_constraints = self.constraints.len();
-        let mut table = vec![vec![0.0; num_variables + num_constraints + 1]; num_constraints + 1];
+        let mut table = vec![vec![0.0; num_variables + num_constraints + 2]; num_constraints + 1];
         for (c_idx, c) in self.constraints.iter().enumerate(){
             for (v_idx, v) in c.iter().enumerate() {
                 if v_idx == num_variables{
-                    table[c_idx][num_variables + num_constraints] = *v;
+                    table[c_idx][num_variables + num_constraints + 1] = *v;
                 }else{
                     table[c_idx][v_idx] = *v;
                 }
@@ -112,7 +112,7 @@ impl Problem{
         for (v_idx, v) in self.problem.iter().enumerate() {
             table[num_constraints][v_idx] = *v * coef;
         }
-        table[num_constraints][num_variables + num_constraints - 1] = 1.;
+        table[num_constraints][num_variables + num_constraints] = 1.;
 
         println!("{:?}", table);
 
@@ -163,9 +163,9 @@ mod tests {
     #[test]
     fn test_calculate_matrix() -> Result<()> {
         let expected = FlatMatrix::new(&vec![
-            vec![3., 5., 1., 0., 0.],
-            vec![4., 1., 0., 1., 0.],
-            vec![-5., -4., 0., 0., 1.],
+            vec![3., 5., 1., 0., 0., 78.],
+            vec![4., 1., 0., 1., 0., 36.],
+            vec![-5., -4., 0., 0., 1., 0.],
         ])?;
 
         let p = Problem::new(vec![5., 4.])?
