@@ -138,7 +138,7 @@ impl Problem{
             let row = matrix.row(r_idx)?;
             for c_idx in 0..num_variables{
                 if row[c_idx] == 1.{
-                    res[c_idx] = row[num_variables + num_constraints];
+                    res[c_idx] = row[num_variables + num_constraints + 1];
                 }
             }
         }
