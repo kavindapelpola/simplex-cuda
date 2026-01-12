@@ -14,6 +14,7 @@ pub fn solve(table: &mut FlatMatrix<f32>, max_loops: Option<usize>) -> Result<()
         let entry = table
             .last_row()
             .iter()
+            .take(table.cols - 2)
             .enumerate()
             .into_iter()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
