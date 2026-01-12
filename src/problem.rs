@@ -1,6 +1,7 @@
 use crate::model::flat_matrix::FlatMatrix;
 use crate::solvers;
 use anyhow::{Result, anyhow};
+use crate::problem::Objective::Minimise;
 
 pub struct Problem {
     problem: Vec<f32>,
@@ -10,6 +11,7 @@ pub struct Problem {
     matrix: Option<FlatMatrix<f32>>,
 }
 
+#[derive(Copy, Clone, PartialEq)]
 enum Objective {
     Minimise,
     Maximise,
@@ -134,7 +136,7 @@ impl Problem {
             .as_mut()
             .ok_or_else(|| anyhow!("matrix not calculated"))?;
 
-        solvers::cpu::solve(matrix, None)?;
+        solvers::cpu::solve(matrix, self.objective.ok_or_else(||anyhow!("no objective"))? == Minimise, None)?;
         self.extract_result()
     }
 

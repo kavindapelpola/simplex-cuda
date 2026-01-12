@@ -3,7 +3,7 @@ use tracing::info;
 use crate::model::flat_matrix::FlatMatrix;
 const MAX_LOOPS: usize = 1_000_000;
 
-pub fn solve(table: &mut FlatMatrix<f32>, max_loops: Option<usize>) -> Result<()> {
+pub fn solve(table: &mut FlatMatrix<f32>, is_min: bool, max_loops: Option<usize>) -> Result<()> {
     let mut counter = 0;
     loop {
         if counter >= max_loops.unwrap_or(MAX_LOOPS) {
@@ -52,7 +52,12 @@ pub fn solve(table: &mut FlatMatrix<f32>, max_loops: Option<usize>) -> Result<()
             }
         }
 
-        if table.last_row().iter().all(|&x| x >= 0.) {
+        let optimal = match is_min {
+            true => table.last_row().iter().all(|&x| x <= 0.),
+            false => table.last_row().iter().all(|&x| x >= 0.),
+        };
+
+        if optimal {
             break;
         }
     }
