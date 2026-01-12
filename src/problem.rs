@@ -1,13 +1,13 @@
 use crate::model::flat_matrix::FlatMatrix;
-use anyhow::{Result, anyhow};
 use crate::solvers;
+use anyhow::{Result, anyhow};
 
 pub struct Problem {
     problem: Vec<f32>,
     constraints: Vec<Vec<f32>>,
     slack_coefs: Vec<f32>,
     objective: Option<Objective>,
-    matrix: Option<FlatMatrix<f32>>
+    matrix: Option<FlatMatrix<f32>>,
 }
 
 enum Objective {
@@ -33,7 +33,7 @@ impl ProblemBuilder {
                 self.problem.problem.len()
             ));
         }
-        Ok(ConstraintBuilder{
+        Ok(ConstraintBuilder {
             constraint: arg,
             problem: self,
         })
@@ -51,31 +51,39 @@ impl ProblemBuilder {
 
     pub fn build(mut self) -> Result<Problem> {
         if self.problem.objective.is_none() {
-            return Err(anyhow!("Please specify objective type Minimise or Maximise"));
+            return Err(anyhow!(
+                "Please specify objective type Minimise or Maximise"
+            ));
         }
         self.problem.calculate_matrix()?;
         Ok(self.problem)
     }
 }
 
-impl ConstraintBuilder{
-    pub fn less(mut self) -> Result<ProblemBuilder>{
+impl ConstraintBuilder {
+    pub fn less(mut self) -> Result<ProblemBuilder> {
         self.problem.problem.constraints.push(self.constraint);
         self.problem.problem.slack_coefs.push(1.);
         Ok(self.problem)
     }
-    pub fn more(mut self) -> Result<ProblemBuilder>{
-        self.problem.problem.constraints.push(self.constraint);
-        self.problem.problem.slack_coefs.push(-1.);
-        Ok(self.problem)
+
+    // TODO: two phase simplex must be implemented to support greater than constraints
+    // ref: https://webspace.maths.qmul.ac.uk/felix.fischer/teaching/opt/notes/notes8.pdf
+    // pub fn more(mut self) -> Result<ProblemBuilder>{
+    pub fn more(self) -> Result<ProblemBuilder> {
+        return Err(anyhow!("two phase simplex has not been implemented yet."));
+
+        // self.problem.problem.constraints.push(self.constraint);
+        // self.problem.problem.slack_coefs.push(-1.);
+        // Ok(self.problem)
     }
 }
 
-impl Problem{
-    pub fn new(problem: Vec<f32>) -> Result<ProblemBuilder>{
-        if problem.len() <= 0{
+impl Problem {
+    pub fn new(problem: Vec<f32>) -> Result<ProblemBuilder> {
+        if problem.len() <= 0 {
             Err(anyhow!("Problem must have at least 1 variable"))
-        }else{
+        } else {
             Ok(ProblemBuilder {
                 problem: Problem {
                     problem,
@@ -87,15 +95,15 @@ impl Problem{
             })
         }
     }
-    fn calculate_matrix(&mut self) -> Result<()>{
+    fn calculate_matrix(&mut self) -> Result<()> {
         let num_variables = self.problem.len();
         let num_constraints = self.constraints.len();
         let mut table = vec![vec![0.0; num_variables + num_constraints + 2]; num_constraints + 1];
-        for (c_idx, c) in self.constraints.iter().enumerate(){
+        for (c_idx, c) in self.constraints.iter().enumerate() {
             for (v_idx, v) in c.iter().enumerate() {
-                if v_idx == num_variables{
+                if v_idx == num_variables {
                     table[c_idx][num_variables + num_constraints + 1] = *v;
-                }else{
+                } else {
                     table[c_idx][v_idx] = *v;
                 }
             }
@@ -120,34 +128,36 @@ impl Problem{
         Ok(())
     }
 
-    pub fn solve_cpu(mut self) -> Result<Vec<f32>>{
-        let matrix = self.matrix.as_mut()
+    pub fn solve_cpu(mut self) -> Result<Vec<f32>> {
+        let matrix = self
+            .matrix
+            .as_mut()
             .ok_or_else(|| anyhow!("matrix not calculated"))?;
 
         solvers::cpu::solve(matrix, None)?;
         self.extract_result()
     }
 
-    fn extract_result(self: Self) -> Result<Vec<f32>>{
+    fn extract_result(self: Self) -> Result<Vec<f32>> {
         let num_variables = self.problem.len();
         let num_constraints = self.constraints.len();
         let mut res = vec![f32::NEG_INFINITY; num_variables + 1];
         let matrix = self.matrix.ok_or_else(|| anyhow!("matrix not available"))?;
 
-        for r_idx in 0..num_constraints{
+        for r_idx in 0..num_constraints {
             let row = matrix.row(r_idx)?;
-            for c_idx in 0..num_variables{
-                if row[c_idx] == 1.{
+            for c_idx in 0..num_variables {
+                if row[c_idx] == 1. {
                     res[c_idx] = row[num_variables + num_constraints + 1];
                 }
             }
         }
 
-        if res[..num_variables].iter().any(|v| v.is_infinite()){
+        if res[..num_variables].iter().any(|v| v.is_infinite()) {
             Err(anyhow!("no solution was found"))
-        }else{
+        } else {
             let mut val = 0.;
-            for v_idx in 0..num_variables{
+            for v_idx in 0..num_variables {
                 val += self.problem[v_idx] * res[v_idx];
             }
             res[num_variables] = val;
@@ -170,11 +180,15 @@ mod tests {
 
         let p = Problem::new(vec![5., 4.])?
             .maximise()
-            .constraint(vec![3., 5., 78.])?.less()?
-            .constraint(vec![4., 1., 36.])?.less()?
+            .constraint(vec![3., 5., 78.])?
+            .less()?
+            .constraint(vec![4., 1., 36.])?
+            .less()?
             .build()?;
 
-        let m = p.matrix.ok_or_else(||anyhow!("matrix could not compute"))?;
+        let m = p
+            .matrix
+            .ok_or_else(|| anyhow!("matrix could not compute"))?;
 
         assert_eq!(expected.data, m.data);
 
@@ -185,8 +199,10 @@ mod tests {
     fn test_solve_cpu() -> Result<()> {
         let p = Problem::new(vec![5., 4.])?
             .maximise()
-            .constraint(vec![3., 5., 78.])?.less()?
-            .constraint(vec![4., 1., 36.])?.less()?
+            .constraint(vec![3., 5., 78.])?
+            .less()?
+            .constraint(vec![4., 1., 36.])?
+            .less()?
             .build()?;
 
         let result = p.solve_cpu()?;
