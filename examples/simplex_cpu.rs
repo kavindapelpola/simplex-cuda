@@ -1,17 +1,19 @@
 use anyhow::Result;
-use simplex_cuda::model::flat_matrix::FlatMatrix;
+use simplex_cuda::{Problem, problem::Constraint};
 use tracing_subscriber;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let mut table = FlatMatrix::<f32>::new(&vec![
-        vec![3., 5., 1., 0., 0., 78.],  // constraint 1
-        vec![4., 1., 0., 1., 0., 36.],  // constraint 3
-        vec![-5., -4., 0., 0., 1., 0.], // objective
-    ])?;
+    let mut p = Problem::maximize(&vec![5., 4.])?
+        .with(Constraint::Lt(vec![3., 5., 78.]))?
+        .with(Constraint::Lt(vec![4., 1., 36.]))?
+        .build()?;
 
-    simplex_cuda::solvers::cpu::solve(&mut table, false, None)?;
+    simplex_cuda::solvers::cpu::solve(&mut p, None)?;
+
+    println!("{}", p);
+    println!("{:?}", p.extract_result());
 
     Ok(())
 }

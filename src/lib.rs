@@ -1,5 +1,5 @@
 pub mod model;
+pub mod problem;
 pub mod solvers;
 
-mod problem;
-pub use problem::{Problem, ProblemBuilder};
+pub use problem::{Constraint, Problem};

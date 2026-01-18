@@ -32,3 +32,7 @@ harness = false
 [[bench]]
 name = "cpu_vs_gpu"
 harness = false
+
+[[example]]
+name = "simplex_cuda"
+required-features = ["cuda"]

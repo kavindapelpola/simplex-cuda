@@ -1,10 +1,15 @@
+use super::super::Problem;
 use anyhow::{Result, anyhow};
 use tracing::info;
-use crate::model::flat_matrix::FlatMatrix;
 const MAX_LOOPS: usize = 1_000_000;
 
-pub fn solve(table: &mut FlatMatrix<f32>, is_min: bool, max_loops: Option<usize>) -> Result<()> {
+pub fn solve(problem: &mut Problem, max_loops: Option<usize>) -> Result<()> {
+    if problem.matrix.is_none() {
+        return Err(anyhow!("matrix not computed, did you forget to build?"));
+    }
     let mut counter = 0;
+    let is_minimize = problem.is_minimize();
+    let table = problem.matrix.as_mut().unwrap();
     loop {
         if counter >= max_loops.unwrap_or(MAX_LOOPS) {
             return Err(anyhow!("no solution found after {} loops", counter));
@@ -52,7 +57,7 @@ pub fn solve(table: &mut FlatMatrix<f32>, is_min: bool, max_loops: Option<usize>
             }
         }
 
-        let optimal = match is_min {
+        let optimal = match is_minimize {
             true => table.last_row().iter().all(|&x| x <= 0.),
             false => table.last_row().iter().all(|&x| x >= 0.),
         };
