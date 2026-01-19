@@ -13,6 +13,7 @@ pub struct Problem {
     objective: Objective,
     constraints: Vec<Constraint>,
     pub matrix: Option<FlatMatrix<f32>>,
+    pub artificial_cols: Vec<usize>,
 }
 
 #[derive(PartialEq)]
@@ -32,6 +33,7 @@ impl Problem {
                 constraints: vec![],
                 objective,
                 matrix: None,
+                artificial_cols: vec![],
             })
         }
     }
@@ -113,10 +115,12 @@ impl Problem {
                     Constraint::Gt(_) => {
                         row[slack_col_idx] = -1.; // surplus
                         row[slack_col_idx + 1] = 1.; // artificial
+                        self.artificial_cols.push(slack_col_idx + 1);
                         slack_col_idx += 2;
                     }
                     Constraint::Eq(_) => {
                         row[slack_col_idx] = 1.; // artificial
+                        self.artificial_cols.push(slack_col_idx);
                         slack_col_idx += 1;
                     }
                 }
@@ -341,5 +345,65 @@ mod tests {
         let result = p.result();
 
         assert!(result.is_err());
+    }
+
+    // Artificial columns tracking tests
+    #[test]
+    fn test_artificial_cols_lt_constraints_none() -> Result<()> {
+        // Lt constraints should not add artificial variables
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Lt(vec![3., 5., 78.]))?
+            .with(Constraint::Lt(vec![4., 1., 36.]))?
+            .build()?;
+
+        assert_eq!(p.artificial_cols, vec![]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_artificial_cols_gt_constraints() -> Result<()> {
+        // Gt constraints add artificial variable at slack_col_idx + 1
+        // With 2 decision vars:
+        // First Gt: surplus at col 2, artificial at col 3
+        // Second Gt: surplus at col 4, artificial at col 5
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Gt(vec![3., 5., 78.]))?
+            .with(Constraint::Gt(vec![4., 1., 36.]))?
+            .build()?;
+
+        assert_eq!(p.artificial_cols, vec![3, 5]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_artificial_cols_eq_constraints() -> Result<()> {
+        // Eq constraints add artificial variable at slack_col_idx
+        // With 2 decision vars:
+        // First Eq: artificial at col 2
+        // Second Eq: artificial at col 3
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Eq(vec![3., 5., 78.]))?
+            .with(Constraint::Eq(vec![4., 1., 36.]))?
+            .build()?;
+
+        assert_eq!(p.artificial_cols, vec![2, 3]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_artificial_cols_mixed_constraints() -> Result<()> {
+        // Test with mixed constraint types
+        // With 2 decision vars:
+        // Lt: slack at col 2 (no artificial)
+        // Gt: surplus at col 3, artificial at col 4
+        // Eq: artificial at col 5
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Lt(vec![2., 3., 10.]))?
+            .with(Constraint::Gt(vec![1., 2., 8.]))?
+            .with(Constraint::Eq(vec![3., 1., 12.]))?
+            .build()?;
+
+        assert_eq!(p.artificial_cols, vec![4, 5]);
+        Ok(())
     }
 }
