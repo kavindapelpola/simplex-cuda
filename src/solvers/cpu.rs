@@ -21,7 +21,6 @@ pub fn solve(problem: &mut Problem, max_loops: Option<usize>) -> Result<()> {
             .iter()
             .take(table.cols - 2)
             .enumerate()
-            .into_iter()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(index, _)| index)
             .ok_or_else(|| anyhow!("no negative coefficients found in objective function"))?;

@@ -1,13 +1,13 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use simplex_cuda::model::flat_matrix::FlatMatrix;
+use simplex_cuda::{Problem, Constraint};
 
 fn simplex_solve_small(c: &mut Criterion) {
     let mut group = c.benchmark_group("simplex_small");
 
-    group.bench_function("flatmatrix", |b| {
+    group.bench_function("problem", |b| {
         b.iter_batched(
-            || create_small_table_flatmatrix(),
-            |mut table| simplex_cuda::solvers::cpu::solve(&mut table, false, None),
+            || create_small_problem(),
+            |mut problem| simplex_cuda::solvers::cpu::solve(&mut problem, None),
             BatchSize::SmallInput,
         )
     });
@@ -21,10 +21,10 @@ fn simplex_solve_large(c: &mut Criterion) {
     // Set longer measurement time for large tables
     group.sample_size(10);
 
-    group.bench_function("flatmatrix", |b| {
+    group.bench_function("problem", |b| {
         b.iter_batched(
-            || create_large_table_flatmatrix(),
-            |mut table| simplex_cuda::solvers::cpu::solve(&mut table, false, None),
+            || create_large_problem(),
+            |mut problem| simplex_cuda::solvers::cpu::solve(&mut problem, None),
             BatchSize::LargeInput,
         )
     });
@@ -32,54 +32,50 @@ fn simplex_solve_large(c: &mut Criterion) {
     group.finish();
 }
 
-pub fn create_small_table_flatmatrix() -> FlatMatrix<f32> {
-    FlatMatrix::from_vec(&vec![
-        vec![3., 5., 1., 0., 0., 78.],
-        vec![4., 1., 0., 1., 0., 36.],
-        vec![-5., -4., 0., 0., 1., 0.],
-    ])
-    .unwrap()
+pub fn create_small_problem() -> Problem {
+    // Maximize: 5x + 4y
+    // Subject to: 3x + 5y <= 78
+    //             4x + y <= 36
+    Problem::maximize(&vec![5., 4.])
+        .unwrap()
+        .with(Constraint::Lt(vec![3., 5., 78.]))
+        .unwrap()
+        .with(Constraint::Lt(vec![4., 1., 36.]))
+        .unwrap()
+        .build()
+        .unwrap()
 }
 
-pub fn create_large_table_flatmatrix() -> FlatMatrix<f32> {
+pub fn create_large_problem() -> Problem {
     let n_constraints = 999;
     let n_decision_vars = 500;
-    let n_slack_vars = 499;
 
-    let nrows = n_constraints + 1;
-    let ncols = n_decision_vars + n_slack_vars + 1;
+    // Build objective function (minimize since the original had positive coefficients in the objective row)
+    let mut objective = vec![0.0_f32; n_decision_vars];
+    for j in 0..n_decision_vars {
+        objective[j] = (j % 15) as f32 * 0.2 + 0.5;
+    }
 
-    let mut data = Vec::with_capacity(nrows);
+    let mut problem = Problem::minimize(&objective).unwrap();
 
-    // Fill constraint rows
+    // Add constraints
     for i in 0..n_constraints {
-        let mut row = vec![0.0_f32; ncols];
+        let mut constraint_coeffs = vec![0.0_f32; n_decision_vars];
 
         // Decision variable coefficients
         for j in 0..n_decision_vars {
-            row[j] = ((i + j * 7) % 10) as f32 * 0.3 + 0.1;
-        }
-
-        // Slack variable: identity matrix
-        if i < n_slack_vars {
-            row[n_decision_vars + i] = 1.0;
+            constraint_coeffs[j] = ((i + j * 7) % 10) as f32 * 0.3 + 0.1;
         }
 
         // RHS
-        row[ncols - 1] = ((i + 1) * 113 % 500) as f32 + 100.0;
+        let rhs = ((i + 1) * 113 % 500) as f32 + 100.0;
+        constraint_coeffs.push(rhs);
 
-        data.push(row);
+        // Add as less-than constraint (since the original had slack variables)
+        problem = problem.with(Constraint::Lt(constraint_coeffs)).unwrap();
     }
 
-    // Objective row
-    let mut obj_row = vec![0.0_f32; ncols];
-    for j in 0..n_decision_vars {
-        obj_row[j] = -((j % 15) as f32 * 0.2 + 0.5);
-    }
-    obj_row[ncols - 1] = 0.0;
-    data.push(obj_row);
-
-    FlatMatrix::from_vec(&data).unwrap()
+    problem.build().unwrap()
 }
 
 criterion_group!(benches, simplex_solve_small, simplex_solve_large);
