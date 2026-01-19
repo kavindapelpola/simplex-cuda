@@ -58,30 +58,26 @@ impl Problem {
         self.objective == Objective::Minimize
     }
 
-    /// Required constraint width. Must include all the problem variables and an rhs
+    /// Required constraint width. Must include all the problem variables and an rhs,
+    /// so problem width + 1
     fn constraint_width(&self) -> usize {
         self.problem.len() + 1
     }
 
     /// Add a constraint
     pub fn with(mut self, constraint: Constraint) -> Result<Self> {
-        match constraint {
-            Constraint::Lt(coeffs) => {
-                if coeffs.len() != self.constraint_width() {
-                    return Err(anyhow!("Invaid constraint length {}", coeffs.len()));
-                }
-                self.constraints.push(coeffs);
-                self.slack_coefs.push(1.);
-            }
-            Constraint::Gt(coeffs) => {
-                if coeffs.len() != self.constraint_width() {
-                    return Err(anyhow!("Invaid constraint length {}", coeffs.len()));
-                }
-                self.constraints.push(coeffs);
-                self.slack_coefs.push(-1.);
-            }
-            Constraint::Eq(_) => (),
+        let (coeffs, slack_coef) = match constraint {
+            Constraint::Lt(coeffs) => (coeffs, 1.),
+            Constraint::Gt(coeffs) => (coeffs, -1.),
+            Constraint::Eq(coeffs) => (coeffs, 0.),
+        };
+
+        if coeffs.len() != self.constraint_width() {
+            return Err(anyhow!("Invalid constraint length {}", coeffs.len()));
         }
+
+        self.constraints.push(coeffs);
+        self.slack_coefs.push(slack_coef);
         Ok(self)
     }
 
@@ -89,7 +85,7 @@ impl Problem {
     pub fn build(mut self) -> Result<Self> {
         let cols = self.constraint_width() + self.slack_coefs.len() + 1; // include a col for the objective function rhs
         let rows = self.constraints.len() + 1; // all the constraints and a row for the objective function
-        let mut matrix = FlatMatrix::<f32>::new_blank(rows, cols)?;
+        let mut matrix = FlatMatrix::<f32>::new(rows, cols)?;
 
         // build the constraint rows in the matrix
         self.constraints.iter().enumerate().for_each(|(c_idx, c)| {
@@ -112,31 +108,35 @@ impl Problem {
     }
 
     /// Return the results of a solve
-    pub fn result(self: Self) -> Result<Vec<f32>> {
-        let num_variables = self.problem.len();
-        let num_constraints = self.constraints.len();
-        let mut res = vec![f32::NEG_INFINITY; num_variables + 1];
+    pub fn result(self) -> Result<Vec<f32>> {
         let matrix = self.matrix.ok_or_else(|| anyhow!("matrix not available"))?;
+        let num_variables = self.problem.len();
+        let mut res = vec![f32::NEG_INFINITY; num_variables + 1];
 
-        for r_idx in 0..num_constraints {
-            let row = matrix.row(r_idx)?;
-            for c_idx in 0..num_variables {
-                if row[c_idx] == 1. {
-                    res[c_idx] = row[num_variables + num_constraints + 1];
-                }
+        // Extract basic variable values from constraint rows
+        for row in matrix.rows().take(matrix.rows - 1) {
+            if let Some((c_idx, _)) = row[..num_variables]
+                .iter()
+                .enumerate()
+                .find(|(_, val)| **val == 1.)
+            {
+                res[c_idx] = *row.last().unwrap();
             }
         }
 
         if res[..num_variables].iter().any(|v| v.is_infinite()) {
-            Err(anyhow!("no solution was found"))
-        } else {
-            let mut val = 0.;
-            for v_idx in 0..num_variables {
-                val += self.problem[v_idx] * res[v_idx];
-            }
-            res[num_variables] = val;
-            Ok(res)
+            return Err(anyhow!("no solution was found"));
         }
+
+        // Calculate objective value
+        res[num_variables] = self
+            .problem
+            .iter()
+            .zip(&res[..num_variables])
+            .map(|(p, r)| p * r)
+            .sum();
+
+        Ok(res)
     }
 }
 
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_build() -> Result<()> {
-        let expected = FlatMatrix::new(&vec![
+        let expected = FlatMatrix::from_vec(&vec![
             vec![3., 5., 1., 0., 0., 78.],
             vec![4., 1., 0., 1., 0., 36.],
             vec![-5., -4., 0., 0., 1., 0.],

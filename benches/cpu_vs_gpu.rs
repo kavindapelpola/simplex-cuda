@@ -9,7 +9,7 @@ fn matrix_create(c: &mut Criterion) {
     let large = vec![vec![0.; 10_000]; 10_000];
 
     c.bench_function("10k x 10k flat matrix create", |b| {
-        b.iter(|| FlatMatrix::new(&large))
+        b.iter(|| FlatMatrix::from_vec(&large))
     });
 
     c.bench_function("10k x 10k cuda matrix create", |b| {

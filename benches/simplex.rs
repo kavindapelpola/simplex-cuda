@@ -33,7 +33,7 @@ fn simplex_solve_large(c: &mut Criterion) {
 }
 
 pub fn create_small_table_flatmatrix() -> FlatMatrix<f32> {
-    FlatMatrix::new(&vec![
+    FlatMatrix::from_vec(&vec![
         vec![3., 5., 1., 0., 0., 78.],
         vec![4., 1., 0., 1., 0., 36.],
         vec![-5., -4., 0., 0., 1., 0.],
@@ -79,7 +79,7 @@ pub fn create_large_table_flatmatrix() -> FlatMatrix<f32> {
     obj_row[ncols - 1] = 0.0;
     data.push(obj_row);
 
-    FlatMatrix::new(&data).unwrap()
+    FlatMatrix::from_vec(&data).unwrap()
 }
 
 criterion_group!(benches, simplex_solve_small, simplex_solve_large);

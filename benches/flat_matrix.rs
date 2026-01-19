@@ -7,17 +7,17 @@ fn create(c: &mut Criterion) {
     let large = vec![vec![0.; 10_000]; 10_000];
 
     c.bench_function("2x2 flat matrix create", |b| {
-        b.iter(|| FlatMatrix::new(&small))
+        b.iter(|| FlatMatrix::from_vec(&small))
     });
 
     c.bench_function("10k x 10k flat matrix create", |b| {
-        b.iter(|| FlatMatrix::new(&large))
+        b.iter(|| FlatMatrix::from_vec(&large))
     });
 }
 
 fn get(c: &mut Criterion) {
     let large = vec![vec![0.; 10_000]; 10_000];
-    let matrix = FlatMatrix::new(&large).unwrap();
+    let matrix = FlatMatrix::from_vec(&large).unwrap();
 
     c.bench_function("10k x 10k flat matrix get", |b| {
         let mut i = 0;
@@ -47,7 +47,7 @@ fn get(c: &mut Criterion) {
 
 fn row_div_scalar(c: &mut Criterion) {
     let large = vec![vec![1.0; 10_000]; 10_000];
-    let mut matrix = FlatMatrix::new(&large).unwrap();
+    let mut matrix = FlatMatrix::from_vec(&large).unwrap();
 
     c.bench_function("10k x 10k flat matrix row_div_scalar", |b| {
         let mut i = 0;
@@ -63,7 +63,7 @@ fn row_div_scalar(c: &mut Criterion) {
 
 fn row_sub_scaled(c: &mut Criterion) {
     let large = vec![vec![1.0; 10_000]; 10_000];
-    let mut matrix = FlatMatrix::new(&large).unwrap();
+    let mut matrix = FlatMatrix::from_vec(&large).unwrap();
 
     c.bench_function("10k x 10k flat matrix row_sub_scaled", |b| {
         let mut i = 0;

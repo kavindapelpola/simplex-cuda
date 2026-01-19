@@ -12,9 +12,22 @@ pub struct FlatMatrix<T: Copy + Zero> {
 }
 
 impl<T: Copy + Zero> FlatMatrix<T> {
+    /// Create a new zero FlatMatrix of non-zero size
+    pub fn new(rows: usize, cols: usize) -> Result<FlatMatrix<T>> {
+        if rows == 0 || cols == 0 {
+            return Err(anyhow!("invalid matrix size"));
+        }
+
+        Ok(FlatMatrix {
+            rows,
+            cols,
+            data: vec![T::zero(); rows * cols],
+        })
+    }
+
     /// Create a new FlatMatrix from a vec of vecs ensuring that the
     /// vec of vecs is appropriately sized and is square
-    pub fn new(data: &Vec<Vec<T>>) -> Result<FlatMatrix<T>> {
+    pub fn from_vec(data: &Vec<Vec<T>>) -> Result<FlatMatrix<T>> {
         // matrix cannot be empty
         let rows = data.len();
         if rows < 1 {
@@ -31,19 +44,6 @@ impl<T: Copy + Zero> FlatMatrix<T> {
             rows,
             cols,
             data: data.iter().flatten().cloned().collect(),
-        })
-    }
-
-    /// Create a new blank FlatMatrix
-    pub fn new_blank(rows: usize, cols: usize) -> Result<FlatMatrix<T>> {
-        if rows == 0 || cols == 0 {
-            return Err(anyhow!("invalid matrix size"));
-        }
-
-        Ok(FlatMatrix {
-            rows,
-            cols,
-            data: vec![T::zero(); rows * cols],
         })
     }
 
@@ -77,6 +77,11 @@ impl<T: Copy + Zero> FlatMatrix<T> {
     /// Return a mutable slice for the last row
     pub fn last_row_mut(&mut self) -> &mut [T] {
         self.row_mut(self.rows - 1).unwrap()
+    }
+
+    /// Iterator over all rows in the matrix
+    pub fn rows(&self) -> impl Iterator<Item = &[T]> {
+        (0..self.rows).map(move |i| self.row(i).unwrap())
     }
 
     /// Return a slice for column at index
@@ -217,17 +222,17 @@ mod tests {
 
     #[test]
     fn flatmatrix_new_empty_returns_error() {
-        assert!(FlatMatrix::<f32>::new(&vec![]).is_err());
+        assert!(FlatMatrix::<f32>::from_vec(&vec![]).is_err());
     }
 
     #[test]
     fn flatmatrix_new_non_square_returns_error() {
-        assert!(FlatMatrix::<f32>::new(&vec![vec![0.], vec![0., 0.]]).is_err());
+        assert!(FlatMatrix::<f32>::from_vec(&vec![vec![0.], vec![0., 0.]]).is_err());
     }
 
     #[test]
     fn flatmatrix_new_square_returns_ok() {
-        let result = FlatMatrix::new(&valid());
+        let result = FlatMatrix::from_vec(&valid());
         assert!(result.is_ok());
         let result = result.unwrap();
         assert_eq!(result.rows, 3);
@@ -237,14 +242,14 @@ mod tests {
     #[test]
     fn last_row_returns_last_row() {
         assert_eq!(
-            FlatMatrix::new(&valid()).unwrap().last_row(),
+            FlatMatrix::from_vec(&valid()).unwrap().last_row(),
             [-5., -4., 0., 0., 1., 0.]
         )
     }
 
     #[test]
     fn row_returns_row_values() {
-        let matrix = FlatMatrix::new(&valid()).unwrap();
+        let matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Test first row
         assert_eq!(matrix.row(0).unwrap(), &[3., 5., 1., 0., 0., 78.]);
@@ -258,13 +263,13 @@ mod tests {
 
     #[test]
     fn row_out_of_bounds_returns_error() {
-        let matrix = FlatMatrix::new(&valid()).unwrap();
+        let matrix = FlatMatrix::from_vec(&valid()).unwrap();
         assert!(matrix.row(3).is_err());
     }
 
     #[test]
     fn row_mut_modifies_row() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Modify the first row
         let row = matrix.row_mut(0).unwrap();
@@ -277,13 +282,13 @@ mod tests {
 
     #[test]
     fn row_mut_out_of_bounds_returns_error() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
         assert!(matrix.row_mut(3).is_err());
     }
 
     #[test]
     fn get_returns_value_at_position() {
-        let matrix = FlatMatrix::new(&valid()).unwrap();
+        let matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Test various positions
         assert_eq!(*matrix.get(0, 0).unwrap(), 3.);
@@ -294,14 +299,14 @@ mod tests {
 
     #[test]
     fn get_out_of_bounds_returns_error() {
-        let matrix = FlatMatrix::new(&valid()).unwrap();
+        let matrix = FlatMatrix::from_vec(&valid()).unwrap();
         assert!(matrix.get(3, 0).is_err());
         assert!(matrix.get(0, 6).is_err());
     }
 
     #[test]
     fn get_mut_modifies_value_at_position() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Modify a value
         *matrix.get_mut(1, 1).unwrap() = 99.;
@@ -313,14 +318,14 @@ mod tests {
 
     #[test]
     fn get_mut_out_of_bounds_returns_error() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
         assert!(matrix.get_mut(3, 0).is_err());
         assert!(matrix.get_mut(0, 6).is_err());
     }
 
     #[test]
     fn col_returns_column_values() {
-        let matrix = FlatMatrix::new(&valid()).unwrap();
+        let matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Test first column (x1)
         assert_eq!(matrix.col(0).unwrap(), vec![&3., &4., &-5.]);
@@ -334,13 +339,13 @@ mod tests {
 
     #[test]
     fn col_out_of_bounds_returns_error() {
-        let matrix = FlatMatrix::new(&valid()).unwrap();
+        let matrix = FlatMatrix::from_vec(&valid()).unwrap();
         assert!(matrix.col(6).is_err());
     }
 
     #[test]
     fn row_div_scalar_divides_all_elements() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Divide first row by 2
         matrix.row_div_scalar(0, 2.0).unwrap();
@@ -355,13 +360,13 @@ mod tests {
 
     #[test]
     fn row_div_scalar_out_of_bounds_returns_error() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
         assert!(matrix.row_div_scalar(3, 2.0).is_err());
     }
 
     #[test]
     fn row_sub_scaled_performs_axpy_operation() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Perform: row[1] -= 2.0 * row[0]
         // Before: row[0] = [3., 5., 1., 0., 0., 78.]
@@ -382,7 +387,7 @@ mod tests {
 
     #[test]
     fn row_sub_scaled_with_zero_factor() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Perform: row[1] -= 0.0 * row[0]
         // Row should remain unchanged
@@ -393,7 +398,7 @@ mod tests {
 
     #[test]
     fn row_sub_scaled_with_negative_factor() {
-        let mut matrix = FlatMatrix::new(&valid()).unwrap();
+        let mut matrix = FlatMatrix::from_vec(&valid()).unwrap();
 
         // Perform: row[1] -= (-1.0) * row[0]
         // Which is equivalent to: row[1] += row[0]
