@@ -11,8 +11,7 @@ pub enum Constraint {
 pub struct Problem {
     problem: Vec<f32>,
     objective: Objective,
-    constraints: Vec<Vec<f32>>,
-    slack_coefs: Vec<f32>,
+    constraints: Vec<Constraint>,
     pub matrix: Option<FlatMatrix<f32>>,
 }
 
@@ -31,7 +30,6 @@ impl Problem {
             Ok(Problem {
                 problem: problem.clone(),
                 constraints: vec![],
-                slack_coefs: vec![],
                 objective,
                 matrix: None,
             })
@@ -66,34 +64,65 @@ impl Problem {
 
     /// Add a constraint
     pub fn with(mut self, constraint: Constraint) -> Result<Self> {
-        let (coeffs, slack_coef) = match constraint {
-            Constraint::Lt(coeffs) => (coeffs, 1.),
-            Constraint::Gt(coeffs) => (coeffs, -1.),
-            Constraint::Eq(coeffs) => (coeffs, 0.),
+        let coeffs = match &constraint {
+            Constraint::Lt(coeffs) | Constraint::Gt(coeffs) | Constraint::Eq(coeffs) => coeffs,
         };
 
         if coeffs.len() != self.constraint_width() {
             return Err(anyhow!("Invalid constraint length {}", coeffs.len()));
         }
 
-        self.constraints.push(coeffs);
-        self.slack_coefs.push(slack_coef);
+        self.constraints.push(constraint);
         Ok(self)
     }
 
     /// Build the problem (matrix) from the problem and constraints
     pub fn build(mut self) -> Result<Self> {
-        let cols = self.constraint_width() + self.slack_coefs.len() + 1; // include a col for the objective function rhs
+        // Count columns needed for each constraint type
+        let num_slack_cols = self.constraints.iter().fold(0usize, |acc, constraint| {
+            acc + match constraint {
+                Constraint::Lt(_) => 1, // slack var for less than
+                Constraint::Gt(_) => 2, // surplus and artificial for greater than
+                Constraint::Eq(_) => 1, // artificial for equal
+            }
+        });
+        let cols = self.constraint_width() + num_slack_cols + 1; // include a col for the objective function rhs
         let rows = self.constraints.len() + 1; // all the constraints and a row for the objective function
         let mut matrix = FlatMatrix::<f32>::new(rows, cols)?;
 
         // build the constraint rows in the matrix
-        self.constraints.iter().enumerate().for_each(|(c_idx, c)| {
-            let row = matrix.row_mut(c_idx).unwrap();
-            row[0..c.len() - 1].copy_from_slice(&c[..c.len() - 1]);
-            row[self.problem.len() + c_idx] = self.slack_coefs[c_idx];
-            row[row.len() - 1] = c[c.len() - 1];
-        });
+        let mut slack_col_idx = self.problem.len();
+        self.constraints
+            .iter()
+            .enumerate()
+            .for_each(|(c_idx, constraint)| {
+                let coeffs = match constraint {
+                    Constraint::Lt(coeffs) | Constraint::Gt(coeffs) | Constraint::Eq(coeffs) => {
+                        coeffs
+                    }
+                };
+                let row = matrix.row_mut(c_idx).unwrap();
+                row[0..coeffs.len() - 1].copy_from_slice(&coeffs[..coeffs.len() - 1]);
+
+                // Add slack/surplus/artificial variables
+                match constraint {
+                    Constraint::Lt(_) => {
+                        row[slack_col_idx] = 1.;
+                        slack_col_idx += 1;
+                    }
+                    Constraint::Gt(_) => {
+                        row[slack_col_idx] = -1.; // surplus
+                        row[slack_col_idx + 1] = 1.; // artificial
+                        slack_col_idx += 2;
+                    }
+                    Constraint::Eq(_) => {
+                        row[slack_col_idx] = 1.; // artificial
+                        slack_col_idx += 1;
+                    }
+                }
+
+                row[row.len() - 1] = coeffs[coeffs.len() - 1];
+            });
 
         // build the problem row
         matrix.last_row_mut()[0..self.problem.len()].copy_from_slice(&self.problem);
@@ -101,7 +130,7 @@ impl Problem {
         if self.is_maximise() {
             matrix.row_mul_scalar(rows - 1, -1.)?;
         }
-        matrix.set(rows - 1, self.problem.len() + self.constraints.len(), 1.)?;
+        matrix.set(rows - 1, cols - 2, 1.)?;
 
         self.matrix = Some(matrix);
         Ok(self)
@@ -161,8 +190,9 @@ mod tests {
     use super::*;
     use crate::solvers;
 
+    // Build tests - Less Than constraints
     #[test]
-    fn test_build() -> Result<()> {
+    fn test_build_with_lt_constraints() -> Result<()> {
         let expected = FlatMatrix::from_vec(&vec![
             vec![3., 5., 1., 0., 0., 78.],
             vec![4., 1., 0., 1., 0., 36.],
@@ -174,17 +204,120 @@ mod tests {
             .with(Constraint::Lt(vec![4., 1., 36.]))?
             .build()?;
 
-        let m = p
-            .matrix
-            .ok_or_else(|| anyhow!("matrix could not compute"))?;
+        let m = p.matrix.ok_or_else(|| anyhow!("matrix not built"))?;
 
         assert_eq!(expected.data, m.data);
-
         Ok(())
     }
 
+    // Build tests - Greater Than constraints
     #[test]
-    fn test_result() -> Result<()> {
+    fn test_build_with_gt_constraints() -> Result<()> {
+        // Greater than adds 2 columns per constraint: surplus (-1) and artificial (+1)
+        let expected = FlatMatrix::from_vec(&vec![
+            vec![3., 5., -1., 1., 0., 0., 0., 78.],
+            vec![4., 1., 0., 0., -1., 1., 0., 36.],
+            vec![-5., -4., 0., 0., 0., 0., 1., 0.],
+        ])?;
+
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Gt(vec![3., 5., 78.]))?
+            .with(Constraint::Gt(vec![4., 1., 36.]))?
+            .build()?;
+
+        let m = p.matrix.ok_or_else(|| anyhow!("matrix not built"))?;
+
+        assert_eq!(expected.data, m.data);
+        Ok(())
+    }
+
+    // Build tests - Equality constraints
+    #[test]
+    fn test_build_with_eq_constraints() -> Result<()> {
+        // Equality adds 1 column per constraint: artificial (+1)
+        let expected = FlatMatrix::from_vec(&vec![
+            vec![3., 5., 1., 0., 0., 78.],
+            vec![4., 1., 0., 1., 0., 36.],
+            vec![-5., -4., 0., 0., 1., 0.],
+        ])?;
+
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Eq(vec![3., 5., 78.]))?
+            .with(Constraint::Eq(vec![4., 1., 36.]))?
+            .build()?;
+
+        let m = p.matrix.ok_or_else(|| anyhow!("matrix not built"))?;
+
+        assert_eq!(expected.data, m.data);
+        Ok(())
+    }
+
+    // Build tests - Mixed constraints
+    #[test]
+    fn test_build_with_mixed_constraints() -> Result<()> {
+        // Lt (1 col) + Gt (2 cols) + Eq (1 col) = 4 extra columns
+        let expected = FlatMatrix::from_vec(&vec![
+            vec![2., 3., 1., 0., 0., 0., 0., 10.],  // Lt: slack
+            vec![1., 2., 0., -1., 1., 0., 0., 8.],   // Gt: surplus + artificial
+            vec![3., 1., 0., 0., 0., 1., 0., 12.],   // Eq: artificial
+            vec![-5., -4., 0., 0., 0., 0., 1., 0.],  // objective + w
+        ])?;
+
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Lt(vec![2., 3., 10.]))?
+            .with(Constraint::Gt(vec![1., 2., 8.]))?
+            .with(Constraint::Eq(vec![3., 1., 12.]))?
+            .build()?;
+
+        let m = p.matrix.ok_or_else(|| anyhow!("matrix not built"))?;
+
+        assert_eq!(expected.data, m.data);
+        Ok(())
+    }
+
+    // Build tests - Maximize negates objective
+    #[test]
+    fn test_build_maximize_negates_objective() -> Result<()> {
+        let p = Problem::maximize(&vec![5., 4.])?
+            .with(Constraint::Lt(vec![3., 5., 78.]))?
+            .build()?;
+
+        let m = p.matrix.ok_or_else(|| anyhow!("matrix not built"))?;
+        let objective_row = m.last_row();
+
+        assert_eq!(objective_row[0], -5.);
+        assert_eq!(objective_row[1], -4.);
+        Ok(())
+    }
+
+    // Build tests - Minimize keeps objective positive
+    #[test]
+    fn test_build_minimize_keeps_objective_positive() -> Result<()> {
+        let p = Problem::minimize(&vec![5., 4.])?
+            .with(Constraint::Lt(vec![3., 5., 78.]))?
+            .build()?;
+
+        let m = p.matrix.ok_or_else(|| anyhow!("matrix not built"))?;
+        let objective_row = m.last_row();
+
+        assert_eq!(objective_row[0], 5.);
+        assert_eq!(objective_row[1], 4.);
+        Ok(())
+    }
+
+    // Constraint validation tests
+    #[test]
+    fn test_constraint_wrong_width_returns_error() {
+        let result = Problem::maximize(&vec![5., 4.])
+            .unwrap()
+            .with(Constraint::Lt(vec![3., 5.])); // Missing RHS
+
+        assert!(result.is_err());
+    }
+
+    // Result extraction tests
+    #[test]
+    fn test_result_extracts_solution() -> Result<()> {
         let mut p = Problem::maximize(&vec![5., 4.])?
             .with(Constraint::Lt(vec![3., 5., 78.]))?
             .with(Constraint::Lt(vec![4., 1., 36.]))?
@@ -195,7 +328,18 @@ mod tests {
         let result = p.result()?;
 
         assert_eq!(vec![6., 12., 78.], result);
-
         Ok(())
+    }
+
+    #[test]
+    fn test_result_no_matrix_returns_error() {
+        let p = Problem::maximize(&vec![5., 4.])
+            .unwrap()
+            .with(Constraint::Lt(vec![3., 5., 78.]))
+            .unwrap();
+
+        let result = p.result();
+
+        assert!(result.is_err());
     }
 }
