@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     simplex_cuda::solvers::cpu::solve(&mut p, None)?;
 
     println!("{}", p);
-    println!("{:?}", p.extract_result());
+    println!("{:?}", p.result());
 
     Ok(())
 }

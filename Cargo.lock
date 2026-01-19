@@ -611,6 +611,7 @@ dependencies = [
  "anyhow",
  "criterion",
  "cust",
+ "num-traits",
  "tracing",
  "tracing-subscriber",
 ]

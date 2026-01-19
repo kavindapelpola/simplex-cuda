@@ -2,15 +2,16 @@
 //! The implementation uses a vec of T to represent a 2D matrix, which can
 //! be copied to the gpu
 use anyhow::{Result, anyhow};
+use num_traits::Zero;
 
 #[derive(Clone)]
-pub struct FlatMatrix<T: Copy> {
+pub struct FlatMatrix<T: Copy + Zero> {
     pub rows: usize,
     pub cols: usize,
     pub data: Vec<T>,
 }
 
-impl<T: Copy> FlatMatrix<T> {
+impl<T: Copy + Zero> FlatMatrix<T> {
     /// Create a new FlatMatrix from a vec of vecs ensuring that the
     /// vec of vecs is appropriately sized and is square
     pub fn new(data: &Vec<Vec<T>>) -> Result<FlatMatrix<T>> {
@@ -30,6 +31,19 @@ impl<T: Copy> FlatMatrix<T> {
             rows,
             cols,
             data: data.iter().flatten().cloned().collect(),
+        })
+    }
+
+    /// Create a new blank FlatMatrix
+    pub fn new_blank(rows: usize, cols: usize) -> Result<FlatMatrix<T>> {
+        if rows == 0 || cols == 0 {
+            return Err(anyhow!("invalid matrix size"));
+        }
+
+        Ok(FlatMatrix {
+            rows,
+            cols,
+            data: vec![T::zero(); rows * cols],
         })
     }
 
@@ -60,6 +74,11 @@ impl<T: Copy> FlatMatrix<T> {
         self.row(self.rows - 1).unwrap()
     }
 
+    /// Return a mutable slice for the last row
+    pub fn last_row_mut(&mut self) -> &mut [T] {
+        self.row_mut(self.rows - 1).unwrap()
+    }
+
     /// Return a slice for column at index
     pub fn col(&self, index: usize) -> Result<Vec<&T>> {
         if index >= self.cols {
@@ -69,6 +88,19 @@ impl<T: Copy> FlatMatrix<T> {
         Ok((0..self.rows)
             .map(|row| &self.data[row * self.cols + index])
             .collect())
+    }
+
+    /// Set the value at position row, col
+    pub fn set(&mut self, row: usize, col: usize, val: T) -> Result<()> {
+        if row >= self.rows {
+            return Err(anyhow!("row index {} out of bounds", row));
+        }
+        if col >= self.cols {
+            return Err(anyhow!("column index {} out of bounds", col));
+        }
+
+        self.data[row * self.cols + col] = val;
+        Ok(())
     }
 
     /// Return the value at position row, col
@@ -113,14 +145,33 @@ impl<T: Copy> FlatMatrix<T> {
         unsafe { self.data.get_unchecked_mut(row * self.cols + col) }
     }
 
+    /// Multiply all elements in a row by a scalar value
+    pub fn row_mul_scalar(&mut self, row_index: usize, multiplier: T) -> Result<()>
+    where
+        T: std::ops::MulAssign,
+    {
+        let row = self.row_mut(row_index)?;
+        for elem in row.iter_mut() {
+            if !elem.is_zero() {
+                *elem *= multiplier;
+            }
+        }
+        Ok(())
+    }
+
     /// Divide all elements in a row by a scalar value
     pub fn row_div_scalar(&mut self, row_index: usize, divisor: T) -> Result<()>
     where
         T: std::ops::DivAssign,
     {
+        if divisor.is_zero() {
+            return Err(anyhow!("divide by zero"));
+        }
         let row = self.row_mut(row_index)?;
         for elem in row.iter_mut() {
-            *elem /= divisor;
+            if !elem.is_zero() {
+                *elem /= divisor;
+            }
         }
         Ok(())
     }

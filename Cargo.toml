@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 cust = { version = "0.3.2", optional = true }
+num-traits = "0.2.19"
 tracing = "0.1.44"
 
 [features]
