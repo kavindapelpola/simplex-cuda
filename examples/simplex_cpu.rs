@@ -1,5 +1,5 @@
 use anyhow::Result;
-use simplex_cuda::{Problem, problem::Constraint};
+use simplex_cuda::{Constraint, Problem};
 use tracing_subscriber;
 
 fn main() -> Result<()> {
